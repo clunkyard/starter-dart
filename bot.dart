@@ -82,24 +82,8 @@ class Bot extends Robot {
       final climb=zone.shape==Shape.sphere?angles.elevationTo(position,zone.center):0.0;
       drive.set(throttle:0.8,turn:angles.clamp(angles.angleDiff(angles.bearingTo(position,zone.center),self.heading)/30),pitchTurn:angles.clamp((climb-self.pitch)/30));
     }
-    // The arena's rate calibration only; safe to delete.
-    final work=raw.number('state.calibration.work');
-    if(work!=null&&work>0)status.set(text:'WORK',value:calibrationWork(work.toInt(),clock.tick).toDouble());
   }
 }
 
-// The calibration kernel, xorshift-sqrt v1: work rounds of a 64-bit
-// xorshift and a square-root sum.
-int calibrationWork(int work, int tick) {
-  var x = 88172645463325252 ^ tick;
-  var sum = 0.0;
-  for (var i = 0; i < work; i++) {
-    x ^= x << 13;
-    x ^= x >>> 7;
-    x ^= x << 17;
-    sum += math.sqrt(x >>> 11);
-  }
-  return (sum.floor() + (x >>> 40)) % 1000000;
-}
 
 void main()=>run(Bot());
