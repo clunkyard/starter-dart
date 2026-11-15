@@ -7,7 +7,8 @@
 // clock: tick seconds remaining_ticks
 // arena: size gravity terrain_kind ground_height(x y)
 // me: health position velocity heading pitch roll angular_velocity
-//   attitude grounded altitude applied
+//   attitude grounded altitude applied hull_mounts to_mount(heading pitch)
+//   from_mount(heading pitch) mount_toward(point)
 // battery: charge capacity regen sustainable_drive compute
 //   drive_cost(fraction)
 // drive: hover_lift
@@ -29,7 +30,8 @@
 // score: me best armour
 // angles: normalize(degrees) angle_diff(target current)
 //   bearing_to(from to) elevation_to(from to) direction(heading pitch)
-//   distance(a b) clamp(value low high)
+//   distance(a b) to_chassis(heading pitch attitude)
+//   from_chassis(heading pitch attitude) clamp(value low high)
 // raw: number(path) text(path) has(path) flag(path) count(path) line()
 // Controls: drive.set(throttle turn pitch_turn)
 //   drive.forces(thrust strafe lift yaw_torque pitch_torque roll_torque brake)
@@ -45,7 +47,7 @@ import 'dart:math' as math;
 import 'package:clunkyard/clunkyard.dart';
 
 class Bot extends Robot {
-  bool free=false;
+  bool free=false;int dodges=0,dodgeEnd=0;
   double steer(double towards,double current)=>angles.clamp(angles.angleDiff(towards,current)/45);
   @override void onStart(){free=match.is3d&&arena.gravity.z==0;}
   @override void onTurn(){
@@ -56,6 +58,7 @@ class Bot extends Robot {
       final throttle=target.range>350?0.7:target.range<200?-0.4:0.2;
       drive.set(throttle:throttle,turn:steer(target.bearing,self.heading),pitchTurn:steer(target.elevation,self.pitch));
       scanner.set(heading:target.bearing,arc:20,pitch:target.elevation);
+      // gun.lead is the intercept if the target holds course.
       final power=gun.powerForFlightTime(target.range,1),aim=gun.lead(target,power);
       final heading=aim?.heading??target.bearing,pitch=aim?.pitch??target.elevation;
       gun.aim(heading:heading,pitch:pitch);final now=gun.aimNow;
@@ -71,6 +74,16 @@ class Bot extends Robot {
       drive.set(throttle:0.5,turn:0.33,pitchTurn:steer(0,self.pitch));
       final pitch=free?((clock.tick~/10)%3-1)*35.0:0.0;
       scanner.set(heading:angles.normalize(scanner.last.heading+36),arc:40,pitch:pitch);status.set(text:'SEARCH');
+    }
+    // A simple dodge: vary it, or predict the shooter.
+    final tick=clock.tick;
+    if(tick>=dodgeEnd&&sensors.cues.any((c)=>c.source==Source.muzzle)){dodges++;dodgeEnd=tick+10;}
+    if(tick<dodgeEnd){
+      // Off the line of fire: left, then right next time (turn is positive left, strafe right).
+      final left=dodges.isOdd;
+      if(match.control==Control.forces){drive.set(throttle:0.5);drive.forces(strafe:left?-1:1);}
+      else drive.set(throttle:1,turn:left?1:-1);
+      status.set(text:left?'dodge:left':'dodge:right',value:dodges.toDouble());
     }
     if(battery.charge<battery.capacity/4)drive.set(throttle:(drive.get('throttle')??0)*0.5);
     final storm=nav.storm,zone=nav.zone;
